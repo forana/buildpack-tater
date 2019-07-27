@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+echo "TATER"
+exit 0

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+BUILD_DIR=$1
+CACHE_DIR=$2
+ENV_DIR=$3
+BIN_DIR=$(cd "$(dirname "$0")"; pwd)
+
+PYTHON_VERSION=python-3.7.3
+
+indent() {
+  sed -u 's/^/       /'
+}
+
+echo "-----> Installing ${PYTHON_VERSION} for ${STACK}"
+VENDORED_BIN="${PYTHON_VERSION}-${STACK}"
+
+if [ -e ${CACHE_DIR}/$VENDORED_BIN ]; then
+    echo "Found in cache" | indent
+else
+    # nuke the cache for sanity
+    rm -rf ${CACHE_DIR}/*
+    # adapted from heroku's buildpack - https://github.com/heroku/heroku-buildpack-python/blob/master/bin/steps/python
+    mkdir -p ${CACHE_DIR}/${VENDORED_BIN}
+    S3_URL="https://lang-python.s3.amazonaws.com/${STACK}/runtimes/${PYTHON_VERSION}.tar.gz"
+    echo "-----> Downloading ${S3_URL}"
+    if ! curl -s ${S3_URL} -o ${CACHE_DIR}/python.tar.gz; then
+        echo "Python ${PYTHON_VERSION} does not appear to be available for the ${STACK} stack. Yell at Alex on github." | indent
+        exit 1
+    fi
+    echo "Downloaded to ${CACHE_DIR}/${VENDORED_BIN}" | indent
+    echo "-----> Extracting"
+    tar zxvf ${CACHE_DIR}/python.tar.gz -C ${CACHE_DIR}/${VENDORED_BIN} > /dev/null;
+fi
+
+echo "-----> Petting the good boy"
+mkdir -p ${BUILD_DIR}/.tater
+cp -R ${BIN_DIR}/../static ${BUILD_DIR}/.tater/static | indent
+cp -R ${CACHE_DIR}/${VENDORED_BIN} ${BUILD_DIR}/.tater/${VENDORED_BIN} | indent
+
+echo "-----> Obliterating Procfile"
+echo "web: .tater/${VENDORED_BIN}/bin/python -m http.server -d .tater/static \${PORT}" > ${BUILD_DIR}/Procfile
+
+echo "-----> He's a good boy"
